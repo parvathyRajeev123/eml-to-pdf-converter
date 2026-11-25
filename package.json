@@ -1,0 +1,17 @@
+{
+  "name": "eml-to-pdf-converter",
+  "version": "1.0.0",
+  "description": "Web application to convert EML email files to PDF",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "mailparser": "^3.7.1",
+    "multer": "^1.4.5-lts.1",
+    "puppeteer": "^23.6.0",
+    "sanitize-html": "^2.13.1"
+  }
+}
