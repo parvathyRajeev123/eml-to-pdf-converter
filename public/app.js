@@ -90,7 +90,7 @@ function renderQueue() {
     if (item.status === 'ready') badgeHtml = `<span class="status-badge status-ready">Ready</span>`;
     if (item.status === 'converting') badgeHtml = `<span class="status-badge status-converting">Converting...</span>`;
     if (item.status === 'done') badgeHtml = `<span class="status-badge status-done">Completed</span>`;
-    if (item.status === 'error') badgeHtml = `<span class="status-badge status-error" title="${item.errorMsg}">Failed</span>`;
+    if (item.status === 'error') badgeHtml = `<span class="status-badge status-error" title="${escapeHtml(item.errorMsg || 'Failed')}">Failed</span>`;
 
     const downloadBtnHtml = item.downloadUrl
       ? `<a href="${item.downloadUrl}" download="${item.pdfName}" class="btn-download">Download PDF</a>`
@@ -98,7 +98,7 @@ function renderQueue() {
 
     li.innerHTML = `
       <div class="file-info">
-        <span class="file-name">${item.file.name}</span>
+        <span class="file-name">${escapeHtml(item.file.name)}</span>
         <span class="file-size">${formatBytes(item.file.size)}</span>
       </div>
       <div class="file-actions">
@@ -130,8 +130,119 @@ clearAllBtn.addEventListener('click', () => {
   renderQueue();
 });
 
+function parseEmlContent(rawText) {
+  const normalized = rawText.replace(/\r\n/g, '\n');
+  const splitIndex = normalized.indexOf('\n\n');
+  const headerBlock = splitIndex >= 0 ? normalized.slice(0, splitIndex) : normalized;
+  let body = splitIndex >= 0 ? normalized.slice(splitIndex + 2) : '';
+
+  // Unfold multi-line headers
+  const unfolded = headerBlock.replace(/\n[ \t]+/g, ' ');
+  const getHeader = (name) => {
+    const match = unfolded.match(new RegExp(`^${name}:\\s*(.*)$`, 'im'));
+    return match ? match[1].trim() : '';
+  };
+
+  // Decode simple quoted-printable soft line breaks & hex escapes if present
+  const isQuotedPrintable = /Content-Transfer-Encoding:\s*quoted-printable/i.test(unfolded);
+  if (isQuotedPrintable) {
+    body = body
+      .replace(/=\n/g, '')
+      .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+
+  return {
+    from: getHeader('From'),
+    to: getHeader('To'),
+    subject: getHeader('Subject') || '(No Subject)',
+    date: getHeader('Date'),
+    body
+  };
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function convertEmlFileToPdfBlob(file, options = {}) {
+  const {
+    pageFormat = 'a4',
+    orientation = 'portrait',
+    includeHeaders = true
+  } = options;
+
+  const rawText = await file.text();
+  const parsed = parseEmlContent(rawText);
+
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-10000px';
+  container.style.top = '0';
+  container.style.width = orientation === 'landscape' ? '1050px' : '760px';
+  container.style.padding = '28px';
+  container.style.background = '#ffffff';
+  container.style.color = '#111827';
+  container.style.fontFamily = 'Arial, sans-serif';
+  container.style.fontSize = '14px';
+  container.style.lineHeight = '1.5';
+
+  const headersHtml = includeHeaders
+    ? `
+      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:18px;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px;">${escapeHtml(parsed.subject)}</div>
+        ${parsed.from ? `<div style="font-size:12px;margin:2px 0;"><strong>From:</strong> ${escapeHtml(parsed.from)}</div>` : ''}
+        ${parsed.to ? `<div style="font-size:12px;margin:2px 0;"><strong>To:</strong> ${escapeHtml(parsed.to)}</div>` : ''}
+        ${parsed.date ? `<div style="font-size:12px;margin:2px 0;"><strong>Date:</strong> ${escapeHtml(parsed.date)}</div>` : ''}
+      </div>
+    `
+    : '';
+
+  const hasHtmlBody = /<html|<body|<div|<p|<br|<table/i.test(parsed.body);
+  const bodyHtml = hasHtmlBody
+    ? parsed.body
+    : `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;margin:0;">${escapeHtml(parsed.body)}</pre>`;
+
+  container.innerHTML = `${headersHtml}<div>${bodyHtml}</div>`;
+  document.body.appendChild(container);
+
+  try {
+    const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+    const imgData = canvas.toDataURL('image/png');
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation, unit: 'pt', format: pageFormat });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 24;
+    const usableWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * usableWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = margin;
+
+    pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+    heightLeft -= pageHeight - margin * 2;
+
+    while (heightLeft > 0) {
+      pdf.addPage();
+      position = margin - (imgHeight - heightLeft);
+      pdf.addImage(imgData, 'PNG', margin, position, usableWidth, imgHeight);
+      heightLeft -= pageHeight - margin * 2;
+    }
+
+    return pdf.output('blob');
+  } finally {
+    container.remove();
+  }
+}
+
 convertAllBtn.addEventListener('click', async () => {
-  const format = document.getElementById('pageFormat').value;
+  const pageFormat = document.getElementById('pageFormat').value;
   const orientation = document.getElementById('orientation').value;
   const includeHeaders = document.getElementById('includeHeaders').checked;
 
@@ -142,32 +253,22 @@ convertAllBtn.addEventListener('click', async () => {
     if (item.status === 'done') continue;
 
     item.status = 'converting';
+    item.errorMsg = null;
     renderQueue();
 
-    const formData = new FormData();
-    formData.append('emlFile', item.file);
-    formData.append('format', format);
-    formData.append('orientation', orientation);
-    formData.append('includeHeaders', String(includeHeaders));
-
     try {
-      const response = await fetch('/api/convert', {
-        method: 'POST',
-        body: formData
+      const blob = await convertEmlFileToPdfBlob(item.file, {
+        pageFormat,
+        orientation,
+        includeHeaders
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Conversion failed');
-      }
-
-      const blob = await response.blob();
       item.blob = blob;
       item.downloadUrl = URL.createObjectURL(blob);
       item.status = 'done';
     } catch (err) {
       item.status = 'error';
-      item.errorMsg = err.message;
+      item.errorMsg = err.message || 'Conversion failed';
     }
 
     renderQueue();
