@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EML to PDF Converter</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- JSZip library to bundle multiple PDFs into a single ZIP file -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <header class="navbar">
+    <div class="container nav-inner">
+      <div class="logo">📧 EML<span>2</span>PDF</div>
+      <span class="badge">Free Online Converter</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h1>EML to PDF Converter</h1>
+      <p>Convert your email files (.eml) to clean, printable PDF documents with attachments & inline images preserved.</p>
+    </section>
+
+    <section class="converter-card">
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="fileInput" accept=".eml,message/rfc822" multiple hidden />
+        <div class="dropzone-content">
+          <div class="upload-icon">📄</div>
+          <button type="button" id="chooseBtn" class="btn-primary btn-large">Choose EML Files</button>
+          <p class="drop-hint">or drag & drop `.eml` files here (Max 25 MB each)</p>
+        </div>
+      </div>
+
+      <div class="settings-panel">
+        <div class="setting-group">
+          <label for="pageFormat">Page Size</label>
+          <select id="pageFormat">
+            <option value="A4" selected>A4 (210 × 297 mm)</option>
+            <option value="Letter">US Letter (8.5 × 11 in)</option>
+            <option value="Legal">Legal</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="orientation">Orientation</label>
+          <select id="orientation">
+            <option value="portrait" selected>Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+        </div>
+
+        <div class="setting-group checkbox-group">
+          <input type="checkbox" id="includeHeaders" checked />
+          <label for="includeHeaders">Include Email Headers (From, To, Date, Subject)</label>
+        </div>
+      </div>
+
+      <div id="fileQueueContainer" class="queue-container hidden">
+        <div class="queue-header">
+          <span id="queueCount">0 Files Selected</span>
+          <button type="button" id="clearAllBtn" class="btn-link">Clear All</button>
+        </div>
+        <ul id="fileList" class="file-list"></ul>
+
+        <div class="queue-actions">
+          <button type="button" id="downloadAllBtn" class="btn-download-all hidden">⬇ Download All (ZIP)</button>
+          <button type="button" id="convertAllBtn" class="btn-convert">Convert to PDF ➔</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="features-grid">
+      <div class="feature-item">
+        <h3>🔒 Privacy First</h3>
+        <p>Files are processed strictly in memory and never stored permanently on disk.</p>
+      </div>
+      <div class="feature-item">
+        <h3>🖼️ Accurate Formatting</h3>
+        <p>Preserves HTML layouts, tables, styles, and inline CID images accurately.</p>
+      </div>
+      <div class="feature-item">
+        <h3>⚡ Batch Conversion</h3>
+        <p>Drop multiple EML emails at once and download all PDFs together as a ZIP.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
